@@ -10,8 +10,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: TDS identity: 23f2000729@ds.study.iitm.ac.in
-        run: echo "Identity verified for 23f2000729@ds.study.iitm.ac.in"
+      - name: TDS identity
+        run: echo "Identity verified"
 
       - name: Checkout Repository
         uses: actions/checkout@v4
