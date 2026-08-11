@@ -1,0 +1,31 @@
+name: TDS GA7 Release Gate
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release-gate-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: TDS identity: 23f2000729@ds.study.iitm.ac.in
+        run: echo "Identity verified for 23f2000729@ds.study.iitm.ac.in"
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Tests
+        run: |
+          pytest
