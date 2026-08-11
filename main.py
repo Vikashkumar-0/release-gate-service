@@ -1,28 +1,40 @@
 import re
 from typing import Any, Dict, List
-from fastapi import FastAPI
-from pydantic import BaseModel
+from fastapi import FastAPI, Request
 
 app = FastAPI(title="CI/CD Container Release Gate")
 
 
-class ReleaseGateRequest(BaseModel):
-    target: str
-    event: str
-    ref: str
-    workflow: Dict[str, Any]
-    image: Dict[str, Any]
+@app.get("/")
+@app.get("/release-gate")
+def health_check():
+    return {"status": "ok", "service": "CI/CD Release Gate"}
 
 
+@app.post("/")
 @app.post("/release-gate")
-def release_gate(payload: ReleaseGateRequest):
+async def release_gate(request: Request):
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+
+    if not isinstance(payload, dict):
+        payload = {}
+
     violations: List[str] = []
 
-    target = payload.target
-    event = payload.event
-    ref = payload.ref
-    wf = payload.workflow or {}
-    img = payload.image or {}
+    target = str(payload.get("target", ""))
+    event = str(payload.get("event", ""))
+    ref = str(payload.get("ref", ""))
+
+    wf = payload.get("workflow")
+    if not isinstance(wf, dict):
+        wf = {}
+
+    img = payload.get("image")
+    if not isinstance(img, dict):
+        img = {}
 
     # 1. EXCESS_PERMISSION
     # Permissions must be exactly least privilege for a release:
@@ -52,17 +64,21 @@ def release_gate(payload: ReleaseGateRequest):
     # 4. MUTABLE_ACTION
     # Actions owned by actions may use a version tag.
     # Every third-party action must be pinned to a full 40-character lowercase hexadecimal commit SHA.
-    actions = wf.get("actions", [])
-    if isinstance(actions, list):
+    actions = wf.get("actions")
+    if not isinstance(actions, list):
+        violations.append("MUTABLE_ACTION")
+    else:
         sha_regex = re.compile(r"^[0-9a-f]{40}$")
         for action in actions:
-            if isinstance(action, dict):
-                owner = action.get("owner", "")
-                action_ref = str(action.get("ref", ""))
-                if owner != "actions":
-                    if not sha_regex.match(action_ref):
-                        violations.append("MUTABLE_ACTION")
-                        break
+            if not isinstance(action, dict):
+                violations.append("MUTABLE_ACTION")
+                break
+            owner = str(action.get("owner", "")).strip()
+            action_ref = str(action.get("ref", "")).strip()
+            if owner != "actions":
+                if not sha_regex.match(action_ref):
+                    violations.append("MUTABLE_ACTION")
+                    break
 
     # 5. SINGLE_STAGE_IMAGE
     # The image must be multi-stage
@@ -82,8 +98,8 @@ def release_gate(payload: ReleaseGateRequest):
 
     # 8. CRITICAL_CVE
     # have zero critical vulnerabilities
-    critical_cves = img.get("criticalVulnerabilities", 0)
-    if critical_cves != 0:
+    cves = img.get("criticalVulnerabilities")
+    if cves != 0 or not isinstance(cves, int) or isinstance(cves, bool):
         violations.append("CRITICAL_CVE")
 
     # 9. UNPINNED_IMAGE
